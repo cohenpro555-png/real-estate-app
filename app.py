@@ -28,7 +28,7 @@ def get_properties():
     try:
         response = supabase.table("properties").select("*").execute()
         return pd.DataFrame(response.data) if response.data else pd.DataFrame()
-    except Exception:
+    except Exception as e:
         return pd.DataFrame()
 
 # סרגל ניווט
@@ -50,16 +50,14 @@ if menu == "1. דשבורד ראשי":
     st.caption("נתוני אמת מחוברים ל-Supabase בענן")
 
     df_properties = get_properties()
-
     total_props = len(df_properties)
     
-    # חישוב שווי כולל
     total_val_usd = 0.0
     total_val_ils = 0.0
     if not df_properties.empty and "purchase_price" in df_properties.columns:
         for _, row in df_properties.iterrows():
             price = float(row.get("purchase_price") or 0)
-            curr = row.get("currency", "$")
+            curr = str(row.get("currency", "$"))
             if curr == "$":
                 total_val_usd += price
             else:
@@ -94,7 +92,7 @@ if menu == "1. דשבורד ראשי":
 
             c6, c7 = st.columns(2)
             purchase_price = c6.number_input(f"מחיר רכישה ({currency})", min_value=0.0, step=1000.0)
-            target_rent = c7.number_input(f"שכר דירה חודשי צפוי ({currency})", min_value=0.0, step=50.0)
+            monthly_rent = c7.number_input(f"שכר דירה חודשי צפוי ({currency})", min_value=0.0, step=50.0)
 
             submit = st.form_submit_button("שמור נכס ב-Supabase", type="primary")
             if submit:
@@ -107,34 +105,19 @@ if menu == "1. דשבורד ראשי":
                         "property_type": prop_type,
                         "status": status,
                         "purchase_price": purchase_price,
+                        "monthly_rent": monthly_rent,
                         "currency": currency
                     }
-                    # ניסיון שמירה מותאם לעמודות הקיימות
                     try:
-                        # בדיקה ושמירה כולל שכר דירה
-                        new_prop["monthly_rent"] = target_rent
-                        supabase.table("properties").insert(new_prop).execute()
+                        res = supabase.table("properties").insert(new_prop).execute()
                         st.success("הנכס נשמר בהצלחה בבסיס הנתונים!")
                         st.rerun()
-                    except Exception:
-                        try:
-                            # אם אין עמודת monthly_rent ננסה target_rent או ללא שדה זה
-                            del new_prop["monthly_rent"]
-                            new_prop["target_rent"] = target_rent
-                            supabase.table("properties").insert(new_prop).execute()
-                            st.success("הנכס נשמר בהצלחה בבסיס הנתונים!")
-                            st.rerun()
-                        except Exception:
-                            # שמירה עם שדות הבסיס בלבד
-                            new_prop.pop("target_rent", None)
-                            supabase.table("properties").insert(new_prop).execute()
-                            st.success("הנכס נשמר בהצלחה בבסיס הנתונים!")
-                            st.rerun()
+                    except Exception as err:
+                        st.error(f"פירוט שגיאה: {str(err)}")
 
     st.subheader("🏡 רשימת הנכסים שלך")
     if not df_properties.empty:
-        # עיצוב תצוגת הטבלה עם המטבע המתאים
-        cols_to_show = [c for c in ["name", "address", "property_type", "status", "currency", "purchase_price"] if c in df_properties.columns]
+        cols_to_show = [c for c in ["name", "address", "property_type", "status", "currency", "purchase_price", "monthly_rent"] if c in df_properties.columns]
         st.dataframe(df_properties[cols_to_show], width='stretch')
     else:
         st.info("עדיין לא הוזנו נכסים. לחץ על 'הוסף נכס חדש למערכת' כדי להוסיף את הנכס הראשון.")
